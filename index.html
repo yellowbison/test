@@ -1,0 +1,338 @@
+<html><head>
+    <script src="https://code.createjs.com/easeljs-0.8.2.min.js"></script>
+    <script>
+
+      var dashCmd;
+      var speedOfFloating = 50, speedOfShooting = 1.2, slowR = 150;
+      var maxx = 1400, maxy = 720, outR = 400;
+      var stage, container, startX, startY, boolStart = false, startTime = 0;
+      var circle0, circle1, circle2, line, balls = [], current, core = undefined, coreId = -1;
+      var circleSlow;
+      var KEYCODE_LEFT = 37, 
+        KEYCODE_RIGHT = 39,
+        KEYCODE_UP = 38, 
+        KEYCODE_DOWN = 40,
+        KEYCODE_ENTER = 13,
+        KEYCODE_W = 87,
+        KEYCODE_A = 65,
+        KEYCODE_S = 83,
+        KEYCODE_D = 68,
+        KEYCODE_C = 67,
+        KEYCODE_Z = 90,
+        KEYCODE_X = 88,
+        KEYCODE_F = 70,
+        KEYCODE_T = 84,
+        KEYCODE_SPACE = 32;
+      var t0 = 0;
+      var keys = [];
+
+      var Cg = 500;
+
+      function distance(x0, y0, x, y) {
+        return Math.sqrt((x-x0)*(x-x0)+(y-y0)*(y-y0));
+      }
+
+
+      function getXY(x0, y0, x, y, r) {
+        var rr = Math.sqrt(x*x+y*y);
+        return {x: x0+x/rr*r, y: y0+y/rr*r};
+      }
+
+      function getBall(x, y, vx, vy, r, isCore) {
+        var ball = new createjs.Shape();
+        if (!isCore)
+          ball.col = "#000";
+        else
+          ball.col = "#F00";
+        ball.graphics.beginFill(ball.col).drawCircle(0, 0, r);
+        ball.alive = true;
+        ball.x = x;
+        ball.y = y;
+        ball.r = r;
+        ball.vx = vx;
+        ball.vy = vy;
+        ball.vx2 = 0;
+        ball.isCore = isCore;
+        ball.ax = 0;
+        ball.ay = 0;
+        ball.isFloating = false;
+        ball.isMoving = 0;
+        ball.slowUntil = -1;
+        container.addChild(ball);
+        ball.isOut = function () {
+          return ((!this.alive)||(this.x+this.r<0)||(this.x-this.r>maxx)||(this.y-this.r>maxy));
+        };
+        ball.die = function() {
+          if (this.alive) {
+            this.alive = false;
+            this.parent.removeChild(this);
+            if (this.col=="#F00") {
+              coreId = -1;
+              core = undefined;
+              if (boolStart) {
+                boolStart = false;
+                container.removeChild(line);
+                container.removeChild(circle0);
+                container.removeChild(circle1);
+                container.removeChild(circle2);
+              }
+              if (circleSlow!=undefined) 
+                container.removeChild(circleSlow);
+            }
+          }
+        };
+        ball.changeR = function(r) {
+          this.r = r;
+          this.graphics.clear().beginFill(this.col).drawCircle(0, 0, this.r);
+        };
+        return ball;
+      }
+
+      function init() {
+        
+        stage = new createjs.Stage("demoCanvas");
+        container = new createjs.Container();
+        stage.addChild(container);
+        var shape = new createjs.Shape(); 
+        shape.graphics.ss(8).beginStroke("black").beginFill("#FFF").drawRect(0, 0, maxx, maxy);
+        container.addChild(shape);
+        stage.update();
+        createjs.Ticker.addEventListener("tick", handleTick);
+        
+        stage.addEventListener("stagemousedown", function (evt) {
+          if (coreId==-1)
+            return;
+          boolStart = true;
+          line = new createjs.Shape(); 
+          //line.graphics.beginStroke("blue").moveTo(startX, startY).lineTo(stage.mouseX, stage.mouseY);
+          container.addChild(line);
+          
+          
+          container.addChild(core);
+          circle0 = new createjs.Shape(); 
+          dashCmd = circle0.graphics.setStrokeDash([7,3]).command;
+          circle0.graphics.setStrokeStyle(2).beginStroke("green").drawCircle(0, 0, core.r+15);
+          startTime = (new Date()).getTime();
+          //circle0.graphics.ss(1).beginStroke("green").drawCircle(0, 0, core.r+15);
+          container.addChild(circle0);
+        
+          circle1 = new createjs.Shape();
+          circle1.graphics.beginFill("blue").drawCircle(0, 0, 3);
+          container.addChild(circle1);
+          
+          circle2 = new createjs.Shape();
+          circle2.graphics.beginFill("#000").drawCircle(0, 0, 10);
+          container.addChild(circle2);
+          circle2.alpha = 0.2;
+          
+          circle0.x = core.x;
+          circle0.y = core.y;
+          circle1.x = stage.mouseX;
+          circle1.y = stage.mouseY;
+          stage.update(evt); 
+        });
+        
+        stage.addEventListener("stagemouseup", function (evt) {
+          
+          if (!boolStart)
+            return;
+          boolStart = false;
+          
+          container.removeChild(line);
+          container.removeChild(circle0);
+          container.removeChild(circle1);
+          container.removeChild(circle2);
+
+          current = balls.length;
+          var xy = getXY(core.x, core.y,  core.x-stage.mouseX,  core.y-stage.mouseY, core.r+15);
+          var tt = (new Date()).getTime()-startTime;
+          //if (tt>1000)
+            //tt = 1000;
+          tt = tt % 1000;
+          var xy2 = getXY(0, 0,  core.x-stage.mouseX,  core.y-stage.mouseY, tt/2);
+          balls.push(getBall(xy.x, xy.y, xy2.x, xy2.y, 10, false));
+          //balls.push(getBall(xy.x, xy.y, (core.x-stage.mouseX)*speedOfShooting, (core.y-stage.mouseY)*speedOfShooting, 10, false));
+          stage.update(evt); 
+        });
+        document.onkeydown = keyPressed;
+        document.onkeyup = keyPressed2;
+        
+      }
+
+
+      function keyPressed(event) {
+
+        if (([KEYCODE_Z, KEYCODE_X, KEYCODE_C].indexOf(event.keyCode)!=-1)&&(balls[current]==undefined))
+            return;
+        if ((coreId==-1)&&(event.keyCode!=KEYCODE_SPACE))
+          return;
+        var ball = balls[current];
+        switch(event.keyCode) {
+          case KEYCODE_SPACE:   
+            if (coreId==-1) {
+              core = getBall(stage.mouseX, stage.mouseY, 0, 0, 20, true);
+              coreId = balls.length;
+              balls.push(core);
+            }
+            else {
+              core.isFloating = true;
+            }
+            break;
+          case KEYCODE_W:
+          case KEYCODE_UP:
+            if (event.repeat)
+              break;
+            core.vy = -400;
+            break;
+          case KEYCODE_A:
+          case KEYCODE_LEFT:
+            core.vx2 = -100;
+            if (!event.repeat) 
+              core.isMoving++;
+            break;
+          case KEYCODE_D:
+          case KEYCODE_RIGHT:
+            core.vx2 = 100;
+            if (!event.repeat) 
+              core.isMoving++;
+            break;
+          case KEYCODE_T:
+            var time = (new Date()).getTime();
+            if (time>=core.slowUntil) {
+              circleSlow = new createjs.Shape();
+              circleSlow.graphics.rf(["#00F", "#FFF"], [0, 1], 0, 0, 0, 0, 0, slowR).dc(0, 0, slowR);
+              circleSlow.alpha = 0.3;
+              circleSlow.x = core.x;
+              circleSlow.y = core.y;
+              container.addChildAt(circleSlow, 1);
+            }
+            core.slowUntil = time+5000;
+            break;
+          case KEYCODE_C:
+            var r = ball.r/(Math.sqrt(2));
+            var rr = Math.sqrt(ball.vx*ball.vx+ball.vy*ball.vy);
+            balls.push(getBall(ball.x+ball.vx/rr*r, ball.y+ball.vy/rr*r, ball.vx*2, ball.vy*2, r, false));
+            balls.push(getBall(ball.x-ball.vx/rr*r, ball.y-ball.vy/rr*r, 0, 0, r, false));
+            ball.die();
+            break;
+          case KEYCODE_X:
+            ball.changeR(ball.r*1.1);
+            ball.vx /= 1.1;
+            ball.vy /= 1.1;
+            break;
+          case KEYCODE_Z:
+            ball.changeR(ball.r/1.1);
+            ball.vx *= 1.1;
+            ball.vy *= 1.1;
+            break;
+        }
+        stage.update();
+      }
+
+      function keyPressed2(event) {
+
+        if (coreId==-1)
+          return;
+        switch(event.keyCode) {
+          case KEYCODE_A:
+          case KEYCODE_LEFT:
+          case KEYCODE_D:
+          case KEYCODE_RIGHT:
+            core.isMoving--;
+            break;
+          case KEYCODE_SPACE:
+            core.isFloating = false;
+        }
+        stage.update();
+      }
+
+      function handleTick(event) {
+
+        var t1 = (new Date()).getTime();
+        tD = (t1 - t0)/1000;
+        t0 = t1;
+        var isSlow = false;
+        if ((coreId!=-1)&&(core.slowUntil!=-1)) {
+          if (t1<=core.slowUntil)
+            isSlow = true;
+          else {
+            core.slowUntil = -1;
+            container.removeChild(circleSlow);
+            circleSlow = undefined;
+          }
+        }
+        for (var i in balls) {
+          var ball = balls[i];
+          var extraX = 0;
+          if (ball.isMoving!=0)
+            extraX = 1;
+          var timeDiscount = 1;
+          if (isSlow && distance(circleSlow.x, circleSlow.y, ball.x, ball.y)<=slowR)
+            timeDiscount = 0.333;
+          ball.x += (ball.vx+ball.vx2*extraX)*tD*timeDiscount;
+          ball.y += ball.vy*tD*timeDiscount;
+          ball.vx += ball.ax*tD*timeDiscount;
+          ball.vy += ball.ay*tD*timeDiscount;
+          if (ball.isFloating && (ball.vy>speedOfFloating))
+            ball.vy = speedOfFloating;
+          ball.ax = 0;
+          ball.ay = Cg;
+          if (ball.isOut()) {
+            ball.die();
+            delete balls[i];
+          }
+        }
+        if (isSlow && (coreId!=-1)) {
+          circleSlow.x = core.x;
+          circleSlow.y = core.y;
+        }
+        var flag = true;
+        while (flag) {
+          flag = false;
+          for (var i in balls) 
+            for (var j in balls)
+              if (!flag && (i<j)) {
+                var ball0 = balls[i], ball1 = balls[j];
+                if (distance(ball0.x, ball0.y, ball1.x, ball1.y)<=0.9*(ball0.r+ball1.r)) {
+                  var x = ball0.x+(ball1.x-ball0.x)*ball1.r/(ball0.r+ball1.r);
+                  var y = ball0.y+(ball1.y-ball0.y)*ball1.r/(ball0.r+ball1.r);
+                  var r = Math.sqrt(ball0.r*ball0.r+ball1.r*ball1.r);
+                  var a0 = ball0.r*ball0.r, a1 = ball1.r*ball1.r, aa = a0+a1;
+                  a0 /= aa;
+                  a1 /= aa; 
+                  var vx = ball0.vx*a0+ball1.vx*a1;
+                  var vy = ball0.vy*a0+ball1.vy*a1;
+                  ball0.die();
+                  delete balls[i];
+                  ball1.die();
+                  delete balls[j];
+                  balls.push(getBall(x, y, vx, vy, r, false));
+                  flag = true; 
+                }
+              }
+        }
+        if (boolStart) {
+          line.graphics.clear().beginStroke("blue").moveTo(core.x, core.y).lineTo(stage.mouseX, stage.mouseY);
+          circle0.x = core.x;
+          circle0.y = core.y;
+          var tmp = t1-startTime;
+          //if (tmp>1000)
+            //tmp = 1000;
+          tmp = tmp % 1000;
+          dashCmd.offset += 1;
+          circle1.x = stage.mouseX;
+          circle1.y = stage.mouseY;
+          var xy = getXY(core.x, core.y,  core.x-stage.mouseX,  core.y-stage.mouseY, core.r+15);
+          circle2.x = xy.x;
+          circle2.y = xy.y;
+          circle2.alpha = 0.3+tmp*0.0007;
+        }
+        stage.update(event); 
+      }
+
+    </script>
+  </head>
+  <body onload="init();">
+    <canvas id="demoCanvas" width="1400" height="720"></canvas>
+
+</body></html>
